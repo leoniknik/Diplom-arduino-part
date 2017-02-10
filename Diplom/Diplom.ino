@@ -1,24 +1,64 @@
 #include <MQ.h>
+#include <iarduino_DHT.h>
+#include <StandardCplusplus.h>
+#include <vector>
 
-//имя для пина, к которому подключен датчик
+using namespace std;
+
 #define PIN_MQ  A0
-// создаём объект для работы с датчиком и передаём ему номер пина
+#define PIN_DHT 4
+#define PIN_LIGHT A1
+
 MQ mq(PIN_MQ);
+iarduino_DHT DHT(PIN_DHT);
+
+struct Rule {
+  int id;
+  int hour;
+  int minute;
+  int mode;
+};
+
+vector<Rule> rules;
 
 void setup()
 {
-  // открываем последовательный порт
   Serial.begin(9600);
-  // выполняем калибровку датчика на чистом воздухе
   mq.calibrate();
+  delay(1000);
 }
 
 void loop()
 {
+  checkSmoke();
+  checkTemAndHum();
+  checkLight();
+  checkSchedule();
+  delay(1000);
+}
+
+void checkSmoke() 
+{
   Serial.print(" Smoke: ");
   Serial.print(mq.readSmoke());
   Serial.println(" ppm ");
-  delay(1000);
+}
+
+void checkTemAndHum() 
+{
+  DHT.read();
+  Serial.println(DHT.hum);
+  Serial.println(DHT.tem);
+}
+
+void checkSchedule() 
+{
+  
+}
+
+void checkLight() {
+  int light = analogRead(PIN_LIGHT);
+  Serial.println(light);
 }
 
 
