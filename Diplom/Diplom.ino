@@ -9,10 +9,10 @@ using namespace std;
 #define PIN_MQ  A0
 #define PIN_DHT 4
 #define PIN_LIGHT A1
-#define RELAY_1 13
-#define RELAY_2 12
-#define RELAY_3 11
-#define RELAY_LIGHT 10
+#define RELAY_1 5
+#define RELAY_2 6
+#define RELAY_3 7
+#define RELAY_LIGHT 8
 
 MQ mq(PIN_MQ);
 DHT11 DHT(PIN_DHT);
