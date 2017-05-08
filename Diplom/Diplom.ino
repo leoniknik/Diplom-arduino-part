@@ -3,6 +3,12 @@
 #include <vector>
 #include <TroykaDHT11.h>
 #include <TimeLib.h>
+#include <SPI.h>
+#include <RF24.h>
+
+RF24 radio(9, 10);
+int BROADCAST = 40;
+int CHANNEL = 0;
 
 using namespace std;
 
@@ -19,7 +25,6 @@ int LIGHT_COUNTER = 5;
 MQ mq(PIN_MQ);
 DHT11 DHT(PIN_DHT);
 
-int CHANNEL_ID = 0;
 int LIGHT_TRESHHOLD = 600;
 int SMOKE_TRESHHOLD = 30;
 int TEMPRETURE_MIN = 20;
@@ -34,6 +39,11 @@ struct Rule {
   int mode;
 };
 
+struct Package {
+  int tempreture;
+  int humidity;
+  int smoke;
+};
 
 vector<Rule> rules;
 
@@ -41,6 +51,11 @@ void setup()
 {
   Serial.begin(9600);
   mq.calibrate();
+  NRF_init();
+  NRF_discover();
+  NRF_offer();
+  NRF_request();
+  NRF_ack();
   initRelay();
   delay(1000);
   printSettings();
@@ -49,11 +64,19 @@ void setup()
 void loop()
 {
   //прослушивание команд
-  checkSmoke();
-  checkTemAndHum();
+  int smoke = checkSmoke();
+  int tempreature = 0;
+  int humidity = 0;
+  checkTemAndHum(tempreature, humidity);
   checkLight();
   checkSchedule();
-  delay(1000);
+  Package package;
+  package.smoke = smoke;
+  package.tempreture = tempreature;
+  package.humidity = humidity;
+  NRF_send(package);
+  delay(2000);
+  NRF_command();
 }
 
 void initRelay() {
@@ -67,7 +90,7 @@ void initRelay() {
   digitalWrite(RELAY_LIGHT, HIGH);
 }
 
-void checkSmoke()
+int checkSmoke()
 {
   int smoke = mq.readSmoke();
   Serial.print("Smoke: ");
@@ -79,12 +102,11 @@ void checkSmoke()
   else {
     //оповещение
   }
+  return smoke;
 }
 
-void checkTemAndHum()
+void checkTemAndHum(int &tempreture, int &humidity)
 {
-  int tempreture = 0;
-  int humidity = 0;
   switch (DHT.read()) {
     case DHT_OK:
       tempreture = DHT.getTemperatureC();
@@ -159,8 +181,8 @@ void printSettings() {
   Serial.println(RELAY_2);
   Serial.print("RELAY_CONDITIONER: ");
   Serial.println(RELAY_CONDITIONER);
-  Serial.print("CHANNEL_ID: ");
-  Serial.println(CHANNEL_ID);
+  Serial.print("CHANNEL: ");
+  Serial.println(CHANNEL);
   Serial.print("LIGHT_TRESHHOLD: ");
   Serial.println(LIGHT_TRESHHOLD);
   Serial.print("SMOKE_TRESHHOLD: ");
@@ -175,5 +197,66 @@ void printSettings() {
   Serial.println(HUMIDITY_MAX);
 }
 
-//нрф часть
+void NRF_init() {
+  radio.begin();
+  radio.setPALevel(RF24_PA_MAX);
+  radio.setChannel(BROADCAST);
+  radio.openWritingPipe(0xF0F0F0F0E1LL);
+  const uint64_t pipe = (0xE8E8F0F0E1LL);
+  radio.openReadingPipe(1, pipe);
+  radio.enableDynamicPayloads();
+  radio.powerUp();
+}
+
+void NRF_discover() {
+  const char text[] = "NRF_DISCOVER";
+  radio.write(&text, sizeof(text));
+}
+
+void NRF_offer() {
+  radio.startListening();
+  while (true) {
+    if (radio.available()) {
+      radio.read( &CHANNEL, sizeof(int) );
+      Serial.println(CHANNEL);
+      radio.stopListening();
+      break;
+    }
+  }
+}
+
+void NRF_request() {
+  radio.setChannel(CHANNEL);
+  const char request[] = "NRF_REQUEST";
+  radio.write(&request, sizeof(request));
+}
+
+void NRF_ack() {
+  while (true) {
+    radio.startListening();
+    if (radio.available()) {
+      Serial.println("NRF_ACK");
+      break;
+    }
+  }
+}
+
+void NRF_send(Package package) {
+  radio.stopListening();
+  const char data[] = {package.smoke, package.tempreture, package.humidity};
+  radio.write(&data, sizeof(data));
+}
+
+void NRF_command() {
+  radio.startListening();
+  for (int i = 0; i < 20000; i++) {
+    if (radio.available()) {
+      long command = -1;
+      radio.read(&command, sizeof(long));
+      Serial.println(command);
+      radio.stopListening();
+      break;
+    }
+  }
+}
 
